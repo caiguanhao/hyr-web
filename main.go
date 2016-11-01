@@ -366,7 +366,7 @@ func main() {
 	address := "127.0.0.1"
 	port := 9876
 	go func() {
-		println("HYR-WEB 1.0 - Created By CGH")
+		println("HYR-WEB 1.1 - Created By CGH")
 		open.Run(fmt.Sprintf("http://%s:%d/", address, port))
 	}()
 	http.HandleFunc("/ws", wsHandler)
