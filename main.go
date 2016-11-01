@@ -131,7 +131,6 @@ func send(path string, sut []string, form url.Values) (success bool, msg, ret st
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
 	session, userid, token := sut[0], sut[1], sut[2]
 	req.Header.Add("Cookie", fmt.Sprintf("PHPSESSID=%s; USERID=%s; TOKEN=%s", session, userid, token))
-	// fmt.Println(fmt.Sprintf("PHPSESSID=%s; USERID=%s; TOKEN=%s", session, userid, token))
 	resp, err := client.Do(req)
 	if err != nil {
 		return
@@ -229,7 +228,6 @@ func buyProduct(id, pattern, amount string, session_userid_token []string) {
 			break
 		}
 		ok, msg, verbose := send("/dtpay/Freezingorders.html", session_userid_token, url.Values{"id": {id}, "pattern": {pattern}, "money": {amount}, "coupon": {"0"}})
-		// fmt.Println(verbose)
 		broadcast(map[string]string{
 			"session": session,
 			"message": fmt.Sprintf("[%s] [购买] %s", time.Now().Format("15:04:05"), msg),

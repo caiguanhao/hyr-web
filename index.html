@@ -9,70 +9,78 @@
 <script src="//cdn.bootcss.com/lodash.js/4.16.4/lodash.min.js"></script>
 <script src="//cdn.bootcss.com/vue/2.0.3/vue.min.js"></script>
 <script src="//cdn.bootcss.com/vue-resource/1.0.3/vue-resource.min.js"></script>
+<script src="//cdn.bootcss.com/q.js/1.4.1/q.min.js"></script>
+<style>
+  .captcha {
+    min-width: 180px;
+    margin-bottom: 10px;
+  }
+  .captcha .form-control {
+    padding-left: 74px;
+  }
+  .captcha .image {
+    position: absolute;
+    left: 18px;
+    top: 1px;
+    border-right: 1px solid #ccc;
+  }
+  .captcha img {
+    height: 32px;
+    width: 64px;
+    background: #fff;
+  }
+</style>
 </head>
 <body>
-  <div id="hyrweb" class="container">
+  <div id="hyrweb" class="container-fluid">
     <div class="page-header">
       <h4>HYR-WEB</h4>
     </div>
     <ul class="nav nav-tabs" style="margin-bottom: 20px">
-      <li v-for="(tab, index) in tabs" v-bind:class="{active: activeTabIndex === index}">
-        <a href v-on:click.prevent="activeTabIndex = index" v-text="tab.name"></a>
+      <li v-for="tab in sessions" v-bind:class="{active: tab._active}">
+        <a href v-on:click.prevent="setTabActive(tab)" v-text="tab.name"></a>
       </li>
     </ul>
     <div class="tab-content">
-      <div v-for="(tab, index) in tabs" v-bind:class="{active: activeTabIndex === index}" class="tab-pane">
+      <div v-for="tab in sessions" v-bind:class="{active: tab._active}" class="tab-pane">
         <form v-if="tab._login === true" class="form-horizontal" v-on:submit="login()">
           <div class="form-group">
             <label for="username" class="col-sm-2 control-label">手机</label>
             <div class="col-sm-10">
-              <input type="text" class="form-control" id="username" placeholder="手机" v-model="username">
+              <input type="text" class="form-control" id="username" placeholder="手机" v-model="username" maxlength="11" autofocus>
             </div>
           </div>
           <div class="form-group">
             <label for="password" class="col-sm-2 control-label">密码</label>
             <div class="col-sm-10">
-              <input type="text" class="form-control" id="password" placeholder="密码" v-model="password">
+              <input type="text" class="form-control" id="password" placeholder="密码" v-model="password" maxlength="12">
             </div>
           </div>
           <div class="form-group">
             <label for="captcha" class="col-sm-2 control-label">验证码</label>
             <div class="col-sm-10">
-              <input type="text" class="form-control" id="captcha" placeholder="验证码" v-model="captcha" maxlength="4">
+              <div class="row">
+                <div class="col-sm-3 captcha" v-for="(login, index) in logins">
+                  <input type="text" class="form-control" id="captcha" placeholder="验证码" v-model="login.captcha" maxlength="4">
+                  <a href class="image" v-on:click.prevent="moreLogin(index)" tabindex="-1" title="点击图片更换验证码">
+                    <img v-bind:src="'data:image/png;base64,'+login.image">
+                  </a>
+                </div>
+              </div>
             </div>
           </div>
           <div class="form-group">
             <div class="col-sm-offset-2 col-sm-10">
-              <a href v-on:click.prevent="newLogin()">
-                <img v-bind:src="'data:image/png;base64,'+loginImage">
-              </a>
-              <small>点击图片更换验证码</small>
-            </div>
-          </div>
-          <div class="form-group">
-            <div class="col-sm-offset-2 col-sm-10">
-              <button type="submit" class="btn btn-default" v-on:click.prevent="login()">登录</button>
+              <div class="btn-group">
+                <button type="submit" class="btn btn-default" v-on:click.prevent="login()">登录</button>
+                <button type="button" class="btn btn-default" v-on:click="moreLogin()">增加同时登录</button>
+              </div>
             </div>
           </div>
         </form>
         <div v-else>
           <div class="row">
-            <div class="col-xs-3">
-              <table class="table table-stripped" v-if="tab.info.length">
-                <tbody>
-                  <tr v-for="i in tab.info">
-                    <td class="nowrap" v-text="i.key"></td>
-                    <td v-text="i.value"></td>
-                  </tr>
-                </tbody>
-              </table>
-              <div v-if="tab._expired">
-                请重新
-                <button class="btn btn-default btn-sm" v-on:click="goLogin(tab)">登录</button>
-                。
-              </div>
-            </div>
-            <div class="col-xs-9">
+            <div class="col-sm-8 col-md-9">
               <div class="form-horizontal" v-if="!tab._logs.length">
                 <div class="form-group">
                   <label for="type" class="col-sm-2 control-label">类型</label>
@@ -108,17 +116,39 @@
                   </div>
                 </div>
               </div>
-              <table class="table table-stripped" v-if="tab.records.length">
-                <thead>
-                  <tr><th colspan="10"><button type="button" class="btn btn-default btn-sm" v-on:click="getInfo(tab)">刷新</button></th></tr>
-                </thead>
-                <tbody>
+              <table class="table table-stripped">
+                <tbody v-if="tab.records.length">
                   <tr v-for="(record, index) in tab.records">
                     <th v-if="index === 0" v-for="item in record" v-bind:width="(100/record.length).toFixed(2) + '%'" v-text="item"></th>
                     <td v-if="index > 0" v-for="item in record" v-bind:colspan="record.length != tab.records[0].length ? tab.records[0].length : null" v-text="item"></td>
                   </tr>
                 </tbody>
               </table>
+            </div>
+            <div class="col-sm-4 col-md-3">
+              <table class="table table-stripped" v-if="tab.info.length">
+                <thead>
+                  <tr>
+                    <th colspan="10">
+                      <div class="btn-group">
+                        <button type="button" class="btn btn-default btn-sm" v-on:click="getInfo(tab)">刷新信息</button>
+                        <button type="button" class="btn btn-default btn-sm" v-on:click="logout(tab)">退出登录</button>
+                      </div>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="i in tab.info">
+                    <td nowrap v-text="i.key"></td>
+                    <td v-text="i.value"></td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="tab._expired">
+                请重新
+                <button class="btn btn-default btn-sm" v-on:click="logout(tab)">登录</button>
+                。
+              </div>
             </div>
           </div>
         </div>
