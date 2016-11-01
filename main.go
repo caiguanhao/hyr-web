@@ -9,7 +9,9 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -32,6 +34,7 @@ var (
 	}
 	clients = make(map[*websocket.Conn]bool)
 	going   = make(map[string]bool)
+	mutex   sync.Mutex
 )
 
 func errJson(w http.ResponseWriter, err error) bool {
@@ -167,7 +170,9 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
+	mutex.Lock()
 	clients[ws] = true
+	mutex.Unlock()
 	for {
 		_, reader, err := ws.NextReader()
 		if err != nil {
@@ -179,18 +184,24 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if msg["action"] == "stop" {
+			mutex.Lock()
 			if _, ok := going[msg["session"]]; ok {
 				delete(going, msg["session"])
 			}
+			mutex.Unlock()
 			continue
 		}
+		mutex.Lock()
 		going[msg["session"]] = true
+		mutex.Unlock()
 		go buyProduct(msg["id"], msg["pattern"], msg["amount"], []string{msg["session"], msg["userid"], msg["token"]})
 	}
 	ws.Close()
+	mutex.Lock()
 	if _, ok := clients[ws]; ok {
 		delete(clients, ws)
 	}
+	mutex.Unlock()
 }
 
 func broadcast(content interface{}) {
@@ -202,14 +213,19 @@ func broadcast(content interface{}) {
 		return
 	}
 	for conn := range clients {
+		mutex.Lock()
 		conn.WriteMessage(websocket.TextMessage, body)
+		mutex.Unlock()
 	}
 }
 
 func buyProduct(id, pattern, amount string, session_userid_token []string) {
 	session := session_userid_token[0]
 	for {
-		if _, ok := going[session]; !ok {
+		mutex.Lock()
+		_, ok := going[session]
+		mutex.Unlock()
+		if !ok {
 			break
 		}
 		ok, msg, verbose := send("/dtpay/verifyamount.html", session_userid_token, url.Values{"money": {amount}, "dtbid": {id}, "pattern": {pattern}})
@@ -224,7 +240,10 @@ func buyProduct(id, pattern, amount string, session_userid_token []string) {
 		time.Sleep(1 * time.Second)
 	}
 	for {
-		if _, ok := going[session]; !ok {
+		mutex.Lock()
+		_, ok := going[session]
+		mutex.Unlock()
+		if !ok {
 			break
 		}
 		ok, msg, verbose := send("/dtpay/Freezingorders.html", session_userid_token, url.Values{"id": {id}, "pattern": {pattern}, "money": {amount}, "coupon": {"0"}})
@@ -344,10 +363,11 @@ func newSessionHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	address := "127.0.0.1"
 	port := 9876
 	go func() {
 		println("HYR-WEB 1.0 - Created By CGH")
-		open.Run(fmt.Sprintf("http://127.0.0.1:%d/", port))
+		open.Run(fmt.Sprintf("http://%s:%d/", address, port))
 	}()
 	http.HandleFunc("/ws", wsHandler)
 	http.HandleFunc("/info", getInfoHandler)
@@ -359,5 +379,5 @@ func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeContent(w, r, "index.html", time.Now(), strings.NewReader(index_html))
 	})
-	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+	fmt.Fprintln(os.Stderr, http.ListenAndServe(fmt.Sprintf("%s:%d", address, port), nil))
 }
