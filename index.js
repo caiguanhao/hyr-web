@@ -44,6 +44,9 @@ var HYRWEB = new Vue({
     }
   },
   methods: {
+    getTypeName: function (cond) {
+      return _.findKey(this.types, cond);
+    },
     setTabActive: function (target) {
       for (var i = this.sessions.length - 1; i > -1; i--) {
         this.sessions[i]._active = _.eq(this.sessions[i], target);
@@ -150,6 +153,21 @@ var HYRWEB = new Vue({
         session: tab.session,
         action: 'stop'
       }));
+    },
+    allDo: function (func) {
+      _(this.sessions).filter(function (s) { return !s._login; }).each(func);
+    },
+    allGo: function () {
+      this.allDo(this.go);
+    },
+    allStop: function () {
+      this.allDo(this.ungo);
+    },
+    allReload: function () {
+      this.allDo(this.getInfo);
+    },
+    allOut: function () {
+      this.allDo(this.logout);
     }
   },
   created: function () {
