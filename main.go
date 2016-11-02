@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"precompiled"
+
 	"github.com/PuerkitoBio/goquery"
 	"github.com/caiguanhao/gotogether"
 	"github.com/gorilla/websocket"
@@ -374,10 +376,10 @@ func main() {
 	http.HandleFunc("/login", loginHandler)
 	http.HandleFunc("/new", newSessionHandler)
 	http.HandleFunc("/index.js", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeContent(w, r, "index.js", time.Now(), strings.NewReader(index_js))
+		http.ServeContent(w, r, "index.js", time.Now(), strings.NewReader(precompiled.File_index_js))
 	})
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeContent(w, r, "index.html", time.Now(), strings.NewReader(index_html))
+		http.ServeContent(w, r, "index.html", time.Now(), strings.NewReader(precompiled.File_index_html))
 	})
 	fmt.Fprintln(os.Stderr, http.ListenAndServe(fmt.Sprintf("%s:%d", address, port), nil))
 }
