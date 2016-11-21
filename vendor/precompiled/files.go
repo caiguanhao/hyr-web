@@ -5,7 +5,7 @@ const File_index_html = `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
-<title>HYR-WEB 1.1</title>
+<title>HYR-WEB 1.2</title>
 <link rel="icon" href="data:;base64,iVBORw0KGgo=">
 <link href="//cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
 <link href="//cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" rel="stylesheet">
@@ -37,7 +37,7 @@ const File_index_html = `<!doctype html>
 <body>
   <div id="hyrweb" class="container-fluid">
     <div class="page-header">
-      <h4>HYR-WEB 1.1</h4>
+      <h4>HYR-WEB 1.2</h4>
     </div>
     <ul class="nav nav-tabs" style="margin-bottom: 20px">
       <li v-for="tab in sessions" v-bind:class="{active: tab._active}">

