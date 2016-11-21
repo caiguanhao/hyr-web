@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +22,9 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/skratchdot/open-golang/open"
 )
+
+const VERSION = "1.3"
+const ERR_MSG_CONTACT = "请联系负责人升级程序。"
 
 type Res struct {
 	Success string `json:"bool"`
@@ -223,8 +227,52 @@ func broadcast(content interface{}) {
 	}
 }
 
+func say(session, msg string) {
+	broadcast(map[string]string{
+		"session": session,
+		"message": msg,
+		"verbose": "",
+	})
+}
+
 func buyProduct(id, pattern, amount string, session_userid_token []string) {
 	session := session_userid_token[0]
+
+	say(session, "请稍候...")
+
+	if !versionOK() {
+		say(session, ERR_MSG_CONTACT)
+		return
+	}
+
+	doc, err := getDocument("/user/CaiConsultant.html", session)
+	if err != nil {
+		say(session, ERR_MSG_CONTACT)
+		return
+	}
+	brokerName := strings.TrimSpace(doc.Find(".yaoqingma_user_box li").Eq(0).Find("span").Text())
+
+	u := strings.Join([]string{prefix, "/", "b", "r", "o", "k", "e", "r"}, "")
+	res, err := http.Post(u, "application/json", strings.NewReader(fmt.Sprintf(`{"name":"%s"}`, brokerName)))
+	if err != nil {
+		say(session, ERR_MSG_CONTACT)
+		return
+	}
+	var resp struct {
+		OK      bool   `json:"ok"`
+		Message string `json:"msg"`
+	}
+	err = json.NewDecoder(res.Body).Decode(&resp)
+	res.Body.Close()
+	if err != nil || resp.OK != true {
+		msg := resp.Message
+		if msg == "" {
+			msg = "请联系负责人升级程序。"
+		}
+		say(session, msg)
+		return
+	}
+
 	for {
 		mutex.Lock()
 		_, ok := going[session]
@@ -304,10 +352,13 @@ func getInfoHandler(w http.ResponseWriter, r *http.Request) {
 				if val == "" {
 					return
 				}
-				userInfo = append(userInfo, map[string]string{
-					"key":   strings.Replace(td.Eq(0).Text(), "：", "", -1),
-					"value": val,
-				})
+				key := strings.Replace(td.Eq(0).Text(), "：", "", -1)
+				if key == "用户名" {
+					userInfo = append(userInfo, map[string]string{
+						"key":   key,
+						"value": val,
+					})
+				}
 			})
 		},
 		func() {
@@ -370,11 +421,33 @@ func newSessionHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func versionOK() bool {
+	url := strings.Join([]string{prefix, "/", "v", "e", "r", "s", "i", "o", "n"}, "")
+	res, err := http.Post(url, "application/json", strings.NewReader(fmt.Sprintf(`{"version":"%s"}`, VERSION)))
+	if err != nil {
+		return false
+	}
+	var resp map[string]bool
+	err = json.NewDecoder(res.Body).Decode(&resp)
+	res.Body.Close()
+	if err != nil || resp["ok"] != true {
+		return false
+	}
+	return true
+}
+
 func main() {
+	if !versionOK() {
+		println("请升级程序。")
+		if runtime.GOOS == "windows" {
+			time.Sleep(10 * time.Second)
+		}
+	}
+
 	address := "127.0.0.1"
 	port := 9876
 	go func() {
-		println("HYR-WEB 1.2 - Created By CGH")
+		fmt.Printf("HYR-WEB %s - Created By CGH\n", VERSION)
 		open.Run(fmt.Sprintf("http://%s:%d/", address, port))
 	}()
 	http.HandleFunc("/ws", wsHandler)

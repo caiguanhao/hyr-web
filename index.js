@@ -28,6 +28,30 @@ var HYRWEB = new Vue({
       '2年复投': {
         id: 105,
         pattern: 1
+      },
+      '年半返还': {
+        id: 104,
+        pattern: 2
+      },
+      '年半复投': {
+        id: 104,
+        pattern: 1
+      },
+      '1年返还': {
+        id: 103,
+        pattern: 2
+      },
+      '1年复投': {
+        id: 103,
+        pattern: 1
+      },
+      '半年返还': {
+        id: 102,
+        pattern: 2
+      },
+      '半年复投': {
+        id: 102,
+        pattern: 1
       }
     }
   },
@@ -185,6 +209,9 @@ var HYRWEB = new Vue({
     this.ws.onmessage = function (evt) {
       var data = JSON.parse(evt.data);
       var session = _.find(this.sessions, { session: data.session });
+      if (session._logs.length > 0 && session._logs[0] === '请稍候...') {
+        session._logs.splice(0, 1);
+      }
       session._logs.unshift(data.message);
       if (session._logs.length > 30) session._logs.length = 30;
     }.bind(this);

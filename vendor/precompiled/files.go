@@ -5,7 +5,7 @@ const File_index_html = `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
-<title>HYR-WEB 1.2</title>
+<title>HYR-WEB 1.3</title>
 <link rel="icon" href="data:;base64,iVBORw0KGgo=">
 <link href="//cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
 <link href="//cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" rel="stylesheet">
@@ -37,7 +37,7 @@ const File_index_html = `<!doctype html>
 <body>
   <div id="hyrweb" class="container-fluid">
     <div class="page-header">
-      <h4>HYR-WEB 1.2</h4>
+      <h4>HYR-WEB 1.3</h4>
     </div>
     <ul class="nav nav-tabs" style="margin-bottom: 20px">
       <li v-for="tab in sessions" v-bind:class="{active: tab._active}">
@@ -122,7 +122,7 @@ const File_index_html = `<!doctype html>
                   </div>
                 </div>
                 <div class="form-group">
-                  <label for="type" class="col-sm-2 control-label">INFO</label>
+                  <label for="type" class="col-sm-2 control-label">信息</label>
                   <div class="col-sm-10">
                     <div class="form-control-static">
                       类型：{{ getTypeName(tab.type) }}<br>
@@ -131,7 +131,7 @@ const File_index_html = `<!doctype html>
                   </div>
                 </div>
                 <div class="form-group">
-                  <label for="type" class="col-sm-2 control-label">LOG</label>
+                  <label for="type" class="col-sm-2 control-label">状态</label>
                   <div class="col-sm-10">
                     <div class="form-control-static" v-html="tab._logs.join('<br>')"></div>
                   </div>
@@ -210,6 +210,30 @@ const File_index_js = `var HYRWEB = new Vue({
       },
       '2年复投': {
         id: 105,
+        pattern: 1
+      },
+      '年半返还': {
+        id: 104,
+        pattern: 2
+      },
+      '年半复投': {
+        id: 104,
+        pattern: 1
+      },
+      '1年返还': {
+        id: 103,
+        pattern: 2
+      },
+      '1年复投': {
+        id: 103,
+        pattern: 1
+      },
+      '半年返还': {
+        id: 102,
+        pattern: 2
+      },
+      '半年复投': {
+        id: 102,
         pattern: 1
       }
     }
@@ -368,6 +392,9 @@ const File_index_js = `var HYRWEB = new Vue({
     this.ws.onmessage = function (evt) {
       var data = JSON.parse(evt.data);
       var session = _.find(this.sessions, { session: data.session });
+      if (session._logs.length > 0 && session._logs[0] === '请稍候...') {
+        session._logs.splice(0, 1);
+      }
       session._logs.unshift(data.message);
       if (session._logs.length > 30) session._logs.length = 30;
     }.bind(this);
