@@ -23,7 +23,7 @@ import (
 	"github.com/skratchdot/open-golang/open"
 )
 
-const VERSION = "1.3"
+const VERSION = "1.4"
 const ERR_MSG_CONTACT = "请联系负责人升级程序。"
 
 type Res struct {
@@ -146,11 +146,11 @@ func send(path string, sut []string, form url.Values) (success bool, msg, ret st
 	if err != nil {
 		return
 	}
+	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return
 	}
-	defer resp.Body.Close()
 	var res Res
 	err = json.Unmarshal(body, &res)
 	ret = string(body)
@@ -245,32 +245,24 @@ func buyProduct(id, pattern, amount string, session_userid_token []string) {
 		return
 	}
 
-	doc, err := getDocument("/user/CaiConsultant.html", session)
-	if err != nil {
-		say(session, ERR_MSG_CONTACT)
-		return
-	}
-	brokerName := strings.TrimSpace(doc.Find(".yaoqingma_user_box li").Eq(0).Find("span").Text())
+	brokerInfoStr := getBrokerInfoStr(session)
 
-	u := strings.Join([]string{prefix, "/", "b", "r", "o", "k", "e", "r"}, "")
-	res, err := http.Post(u, "application/json", strings.NewReader(fmt.Sprintf(`{"name":"%s"}`, brokerName)))
-	if err != nil {
-		say(session, ERR_MSG_CONTACT)
-		return
-	}
-	var resp struct {
-		OK      bool   `json:"ok"`
-		Message string `json:"msg"`
-	}
-	err = json.NewDecoder(res.Body).Decode(&resp)
-	res.Body.Close()
-	if err != nil || resp.OK != true {
-		msg := resp.Message
+	for {
+		mutex.Lock()
+		_, ok := going[session]
+		mutex.Unlock()
+		if !ok {
+			break
+		}
+		_, qok, msg := checkQuota(brokerInfoStr, session, id, pattern, amount)
+		if qok {
+			break
+		}
 		if msg == "" {
-			msg = "请联系负责人升级程序。"
+			msg = ERR_MSG_CONTACT
 		}
 		say(session, msg)
-		return
+		time.Sleep(1 * time.Second)
 	}
 
 	for {
@@ -298,17 +290,73 @@ func buyProduct(id, pattern, amount string, session_userid_token []string) {
 		if !ok {
 			break
 		}
-		ok, msg, verbose := send("/dtpay/Freezingorders.html", session_userid_token, url.Values{"id": {id}, "pattern": {pattern}, "money": {amount}, "coupon": {"0"}})
-		broadcast(map[string]string{
-			"session": session,
-			"message": fmt.Sprintf("[%s] [购买] %s", time.Now().Format("15:04:05"), msg),
-			"verbose": verbose,
-		})
-		if ok {
-			break
+		_, qok, msg := checkQuota(brokerInfoStr, session, id, pattern, amount)
+		if qok {
+			ok, msg, verbose := send("/dtpay/Freezingorders.html", session_userid_token, url.Values{"id": {id}, "pattern": {pattern}, "money": {amount}, "coupon": {"0"}})
+			broadcast(map[string]string{
+				"session": session,
+				"message": fmt.Sprintf("[%s] [购买] %s", time.Now().Format("15:04:05"), msg),
+				"verbose": verbose,
+			})
+			if ok {
+				doneQuota(brokerInfoStr, session, id, pattern, amount)
+				break
+			}
+		} else {
+			if msg == "" {
+				msg = ERR_MSG_CONTACT
+			}
+			say(session, msg)
 		}
 		time.Sleep(1 * time.Second)
 	}
+}
+
+func getBrokerInfo(session string) (brokerInfo []map[string]string) {
+	doc, err := getDocument("/user/CaiConsultant.html", session)
+	if err != nil {
+		return
+	}
+	doc.Find(".yaoqingma_user_box li").Each(func(i int, s *goquery.Selection) {
+		brokerInfo = append(brokerInfo, map[string]string{
+			"key":   strings.TrimSpace(strings.Replace(s.Find("label").Text(), "：", "", -1)),
+			"value": strings.TrimSpace(s.Find("span").Text()),
+		})
+	})
+	return
+}
+
+func getBrokerInfoStr(session string) string {
+	brokerInfoStr, _ := json.Marshal(getBrokerInfo(session))
+	return string(brokerInfoStr)
+}
+
+func checkQuota(brokerInfoStr, session, id, pattern, amount string) (quota int, ok bool, msg string) {
+	u := strings.Join([]string{prefix, "/", "a", "c", "c", "o", "u", "n", "t"}, "")
+	res, err := http.Post(u, "application/json", strings.NewReader(fmt.Sprintf(`{"broker":%s,"id":"%s","pattern":"%s","amount":"%s"}`, brokerInfoStr, id, pattern, amount)))
+	if err != nil {
+		return
+	}
+	var resp struct {
+		OK      bool   `json:"ok"`
+		Quota   int    `json:"quota"`
+		Message string `json:"msg"`
+	}
+	json.NewDecoder(res.Body).Decode(&resp)
+	res.Body.Close()
+	quota = resp.Quota
+	ok = resp.OK
+	msg = resp.Message
+	return
+}
+
+func doneQuota(brokerInfoStr, session, id, pattern, amount string) {
+	u := strings.Join([]string{prefix, "/", "a", "c", "c", "o", "u", "n", "t", "s", "/", "d", "o", "n", "e"}, "")
+	resp, err := http.Post(u, "application/json", strings.NewReader(fmt.Sprintf(`{"broker":%s,"id":"%s","pattern":"%s","amount":"%s"}`, brokerInfoStr, id, pattern, amount)))
+	if err == nil {
+		resp.Body.Close()
+	}
+	return
 }
 
 func getInfoHandler(w http.ResponseWriter, r *http.Request) {
@@ -319,8 +367,10 @@ func getInfoHandler(w http.ResponseWriter, r *http.Request) {
 
 	var records [][]string
 	var info []map[string]string
+	var basicInfo []map[string]string
 	var productInfo []map[string]string
 	var userInfo []map[string]string
+	var brokerInfo []map[string]string
 
 	gotogether.Parallel{
 		func() {
@@ -335,7 +385,7 @@ func getInfoHandler(w http.ResponseWriter, r *http.Request) {
 			})
 			doc.Find(".T_right_box1 td").Each(func(i int, s *goquery.Selection) {
 				p := s.Find("p")
-				info = append(info, map[string]string{
+				basicInfo = append(basicInfo, map[string]string{
 					"key":   p.Eq(0).Text(),
 					"value": p.Eq(1).Text(),
 				})
@@ -362,6 +412,13 @@ func getInfoHandler(w http.ResponseWriter, r *http.Request) {
 			})
 		},
 		func() {
+			quota, _, _ := checkQuota(getBrokerInfoStr(data["session"]), data["session"], "", "", "")
+			brokerInfo = append([]map[string]string{{
+				"key":   "抢购配额",
+				"value": fmt.Sprintf("%d", quota),
+			}}, info...)
+		},
+		func() {
 			doc, err := getDocument("/investment/dtpay.html", data["session"])
 			if err != nil {
 				return
@@ -370,15 +427,17 @@ func getInfoHandler(w http.ResponseWriter, r *http.Request) {
 				var done int
 				fmt.Sscanf(strings.TrimSpace(s.Find(".Sb_BarNum").Text()), "%d%%", &done)
 				productInfo = append(productInfo, map[string]string{
-					"key":   fmt.Sprintf("%s剩余", strings.TrimSpace(s.Find(".Sb_conList_month span").Text())),
+					"key":   fmt.Sprintf("%s剩余", strings.TrimSpace(strings.Replace(strings.Replace(s.Find(".Sb_conList_month span").Text(), "\n", "", -1), " ", "", -1))),
 					"value": fmt.Sprintf("%d%% (%s万元)", 100-done, s.Find(".Sb_conList_LastMoney strong").Text()),
 				})
 			})
 		},
 	}.Run()
 
-	info = append(info, productInfo...)
+	info = append(info, brokerInfo...)
 	info = append(info, userInfo...)
+	info = append(info, basicInfo...)
+	info = append(info, productInfo...)
 
 	sendJson(w, struct {
 		Records [][]string          `json:"records"`

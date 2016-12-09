@@ -5,7 +5,7 @@ const File_index_html = `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
-<title>HYR-WEB 1.3</title>
+<title>HYR-WEB 1.4</title>
 <link rel="icon" href="data:;base64,iVBORw0KGgo=">
 <link href="//cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
 <link href="//cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" rel="stylesheet">
@@ -37,7 +37,7 @@ const File_index_html = `<!doctype html>
 <body>
   <div id="hyrweb" class="container-fluid">
     <div class="page-header">
-      <h4>HYR-WEB 1.3</h4>
+      <h4>HYR-WEB 1.4</h4>
     </div>
     <ul class="nav nav-tabs" style="margin-bottom: 20px">
       <li v-for="tab in sessions" v-bind:class="{active: tab._active}">
@@ -95,35 +95,35 @@ const File_index_html = `<!doctype html>
             <div class="col-sm-8 col-md-9">
               <div class="form-horizontal" v-if="!tab._logs.length">
                 <div class="form-group">
-                  <label for="type" class="col-sm-2 control-label">类型</label>
-                  <div class="col-sm-10">
+                  <label for="type" class="col-sm-1 control-label">类型</label>
+                  <div class="col-sm-11">
                     <select class="form-control" id="type" v-model="tab.type">
                       <option v-for="(value, type) in types" v-text="type" v-bind:value="value"></option>
                     </select>
                   </div>
                 </div>
                 <div class="form-group">
-                  <label for="amount" class="col-sm-2 control-label">金额</label>
-                  <div class="col-sm-10">
+                  <label for="amount" class="col-sm-1 control-label">金额</label>
+                  <div class="col-sm-11">
                     <input type="text" class="form-control" id="amount" placeholder="金额" v-model="tab.amount">
                   </div>
                 </div>
                 <div class="form-group">
-                  <div class="col-sm-offset-2 col-sm-10">
+                  <div class="col-sm-offset-1 col-sm-11">
                     <button type="button" class="btn btn-default" v-bind:disabled="!ws" v-on:click="go(tab)">抢</button>
                   </div>
                 </div>
               </div>
               <div class="form-horizontal" v-else>
                 <div class="form-group">
-                  <div class="col-sm-offset-2 col-sm-10">
+                  <div class="col-sm-offset-1 col-sm-11">
                     <button type="button" class="btn btn-default" v-bind:disabled="!ws" v-on:click="ungo(tab)">停止抢</button>
                     <button type="button" class="btn btn-default" v-on:click="ungo(tab); tab._logs = []">停止抢并重置</button>
                   </div>
                 </div>
                 <div class="form-group">
-                  <label for="type" class="col-sm-2 control-label">信息</label>
-                  <div class="col-sm-10">
+                  <label for="type" class="col-sm-1 control-label">信息</label>
+                  <div class="col-sm-11">
                     <div class="form-control-static">
                       类型：{{ getTypeName(tab.type) }}<br>
                       金额：{{ tab.amount }}
@@ -131,13 +131,18 @@ const File_index_html = `<!doctype html>
                   </div>
                 </div>
                 <div class="form-group">
-                  <label for="type" class="col-sm-2 control-label">状态</label>
-                  <div class="col-sm-10">
+                  <label for="type" class="col-sm-1 control-label">状态</label>
+                  <div class="col-sm-11">
                     <div class="form-control-static" v-html="tab._logs.join('<br>')"></div>
                   </div>
                 </div>
               </div>
               <table class="table table-stripped">
+                <tbody v-if="!tab._expired && !tab.records.length">
+                  <tr>
+                    <td>正在获取信息...</td>
+                  </tr>
+                </tbody>
                 <tbody v-if="tab.records.length">
                   <tr v-for="(record, index) in tab.records">
                     <th v-if="index === 0" v-for="item in record" v-bind:width="(100/record.length).toFixed(2) + '%'" v-text="item"></th>
@@ -165,6 +170,9 @@ const File_index_html = `<!doctype html>
                   </tr>
                 </tbody>
               </table>
+              <div v-if="!tab._expired && !tab.info.length">
+                正在获取信息...
+              </div>
               <div v-if="tab._expired">
                 请重新
                 <button class="btn btn-default btn-sm" v-on:click="logout(tab)">登录</button>
