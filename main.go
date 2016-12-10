@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -283,6 +284,7 @@ func buyProduct(id, pattern, amount string, session_userid_token []string) {
 		}
 		time.Sleep(1 * time.Second)
 	}
+
 	for {
 		mutex.Lock()
 		_, ok := going[session]
@@ -465,6 +467,41 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func crackCaptcha(base64 string) *string {
+	v := url.Values{}
+	v.Set("key", crackCaptchaKey)
+	v.Set("codeType", "4004")
+	v.Set("base64Str", base64)
+	v.Set("dtype", "json")
+	res, err := http.PostForm("https://op.juhe.cn/vercode/index", v)
+	if err != nil {
+		return nil
+	}
+	var resp struct {
+		ErrCode int    `json:"error_code"`
+		Result  string `json:"result"`
+		Message string `json:"reason"`
+	}
+	json.NewDecoder(res.Body).Decode(&resp)
+	res.Body.Close()
+	re := regexp.MustCompile("^[0-9]{4}$")
+	if re.MatchString(resp.Result) {
+		return &resp.Result
+	}
+	return nil
+}
+
+func crackCaptchaHandler(w http.ResponseWriter, r *http.Request) {
+	data, err := parseJsonRequestBody(r.Body)
+	if errJson(w, err) {
+		return
+	}
+	result := crackCaptcha(data["image"])
+	sendJson(w, map[string]interface{}{
+		"result": result,
+	})
+}
+
 func newSessionHandler(w http.ResponseWriter, r *http.Request) {
 	resp, err := http.Get("https://www.hengyirong.com/site/captcha/")
 	if errJson(w, err) {
@@ -513,6 +550,7 @@ func main() {
 	http.HandleFunc("/info", getInfoHandler)
 	http.HandleFunc("/login", loginHandler)
 	http.HandleFunc("/new", newSessionHandler)
+	http.HandleFunc("/crack", crackCaptchaHandler)
 	http.HandleFunc("/index.js", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeContent(w, r, "index.js", time.Now(), strings.NewReader(precompiled.File_index_js))
 	})

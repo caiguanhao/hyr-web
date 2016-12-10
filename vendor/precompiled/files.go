@@ -72,7 +72,7 @@ const File_index_html = `<!doctype html>
             <div class="col-sm-10">
               <div class="row">
                 <div class="col-sm-3 captcha" v-for="(login, index) in logins">
-                  <input type="text" class="form-control" id="captcha" placeholder="验证码" v-model="login.captcha" maxlength="4">
+                  <input type="text" class="form-control" id="captcha" placeholder="验证码" v-model="login.captcha" maxlength="4" v-on:dblclick="crackCaptcha(login)">
                   <a href class="image" v-on:click.prevent="moreLogin(index)" tabindex="-1" title="点击图片更换验证码">
                     <img v-bind:src="'data:image/png;base64,'+login.image">
                   </a>
@@ -270,6 +270,11 @@ const File_index_js = `var HYRWEB = new Vue({
     newLogin: function () {
       this.logins = [];
       this.moreLogin();
+    },
+    crackCaptcha: function (login) {
+      this.$http.post('/crack', { image: login.image }).then(function (res) {
+        login.captcha = res.body.result;
+      });
     },
     moreLogin: function (replace) {
       this.$http.get('/new').then(function (res) {
