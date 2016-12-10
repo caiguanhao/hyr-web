@@ -33,6 +33,17 @@ type Res struct {
 	ErrMsg  string `json:"msg"`
 }
 
+type Credential struct {
+	Session string `json:"session"`
+	User    string `json:"user"`
+	UserID  string `json:"userid"`
+	Token   string `json:"token"`
+}
+
+func (c Credential) ToCookie() string {
+	return fmt.Sprintf("PHPSESSID=%s; user=%s; USERID=%s; TOKEN=%s", c.Session, c.User, c.UserID, c.Token)
+}
+
 var (
 	upgrader = websocket.Upgrader{
 		Error: func(w http.ResponseWriter, r *http.Request, status int, err error) {
@@ -73,21 +84,23 @@ func getPHPSESSID(resp *http.Response) *string {
 	return nil
 }
 
-func getCookieValues(resp *http.Response) (outSession, outUserID, outToken *string) {
+func getCookieValues(resp *http.Response) (credential Credential) {
 	for _, cookie := range resp.Cookies() {
 		switch strings.ToUpper(cookie.Name) {
 		case "PHPSESSID":
-			outSession = &cookie.Value
+			credential.Session = cookie.Value
+		case "USER":
+			credential.User = cookie.Value
 		case "USERID":
-			outUserID = &cookie.Value
+			credential.UserID = cookie.Value
 		case "TOKEN":
-			outToken = &cookie.Value
+			credential.Token = cookie.Value
 		}
 	}
 	return
 }
 
-func postLogin(username, password, captcha, inSession string) (outUsername, outPassword, outSession, outUserID, outToken *string, err error) {
+func postLogin(username, password, captcha, inSession string) (outUsername, outPassword *string, credential Credential, err error) {
 	if len(password) > 12 {
 		password = password[:12]
 	}
@@ -109,8 +122,8 @@ func postLogin(username, password, captcha, inSession string) (outUsername, outP
 		return
 	}
 	defer resp.Body.Close()
-	outSession, outUserID, outToken = getCookieValues(resp)
-	if outSession == nil || outUserID == nil || outToken == nil {
+	credential = getCookieValues(resp)
+	if credential.Session == "" || credential.User == "" || credential.UserID == "" || credential.Token == "" {
 		err = errors.New("用户名、密码或验证码错误")
 		return
 	}
@@ -134,15 +147,14 @@ func getDocument(path string, session string) (*goquery.Document, error) {
 	return goquery.NewDocumentFromResponse(resp)
 }
 
-func send(path string, sut []string, form url.Values) (success bool, msg, ret string) {
+func send(path string, credential Credential, form url.Values) (success bool, msg, ret string) {
 	client := &http.Client{}
 	req, err := http.NewRequest("POST", "https://www.hengyirong.com"+path, strings.NewReader(form.Encode()))
 	if err != nil {
 		return
 	}
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
-	session, userid, token := sut[0], sut[1], sut[2]
-	req.Header.Add("Cookie", fmt.Sprintf("PHPSESSID=%s; USERID=%s; TOKEN=%s", session, userid, token))
+	req.Header.Add("Cookie", credential.ToCookie())
 	resp, err := client.Do(req)
 	if err != nil {
 		return
@@ -203,7 +215,13 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		mutex.Lock()
 		going[msg["session"]] = true
 		mutex.Unlock()
-		go buyProduct(msg["id"], msg["pattern"], msg["amount"], []string{msg["session"], msg["userid"], msg["token"]})
+		credential := Credential{
+			Session: msg["session"],
+			User:    msg["user"],
+			UserID:  msg["userid"],
+			Token:   msg["token"],
+		}
+		go buyProduct(msg["id"], msg["pattern"], msg["amount"], credential)
 	}
 	ws.Close()
 	mutex.Lock()
@@ -236,46 +254,44 @@ func say(session, msg string) {
 	})
 }
 
-func buyProduct(id, pattern, amount string, session_userid_token []string) {
-	session := session_userid_token[0]
-
-	say(session, "请稍候...")
+func buyProduct(id, pattern, amount string, credential Credential) {
+	say(credential.Session, "请稍候...")
 
 	if !versionOK() {
-		say(session, ERR_MSG_CONTACT)
+		say(credential.Session, ERR_MSG_CONTACT)
 		return
 	}
 
-	brokerInfoStr := getBrokerInfoStr(session)
+	brokerInfoStr := getBrokerInfoStr(credential.Session)
 
 	for {
 		mutex.Lock()
-		_, ok := going[session]
+		_, ok := going[credential.Session]
 		mutex.Unlock()
 		if !ok {
 			break
 		}
-		_, qok, msg := checkQuota(brokerInfoStr, session, id, pattern, amount)
+		_, qok, msg := checkQuota(brokerInfoStr, credential.Session, id, pattern, amount)
 		if qok {
 			break
 		}
 		if msg == "" {
 			msg = ERR_MSG_CONTACT
 		}
-		say(session, msg)
+		say(credential.Session, msg)
 		time.Sleep(1 * time.Second)
 	}
 
 	for {
 		mutex.Lock()
-		_, ok := going[session]
+		_, ok := going[credential.Session]
 		mutex.Unlock()
 		if !ok {
 			break
 		}
-		ok, msg, verbose := send("/dtpay/verifyamount.html", session_userid_token, url.Values{"money": {amount}, "dtbid": {id}, "pattern": {pattern}})
+		ok, msg, verbose := send("/dtpay/verifyamount.html", credential, url.Values{"money": {amount}, "dtbid": {id}, "pattern": {pattern}})
 		broadcast(map[string]string{
-			"session": session,
+			"session": credential.Session,
 			"message": fmt.Sprintf("[%s] [检查] %s", time.Now().Format("15:04:05"), msg),
 			"verbose": verbose,
 		})
@@ -287,28 +303,28 @@ func buyProduct(id, pattern, amount string, session_userid_token []string) {
 
 	for {
 		mutex.Lock()
-		_, ok := going[session]
+		_, ok := going[credential.Session]
 		mutex.Unlock()
 		if !ok {
 			break
 		}
-		_, qok, msg := checkQuota(brokerInfoStr, session, id, pattern, amount)
+		_, qok, msg := checkQuota(brokerInfoStr, credential.Session, id, pattern, amount)
 		if qok {
-			ok, msg, verbose := send("/dtpay/Freezingorders.html", session_userid_token, url.Values{"id": {id}, "pattern": {pattern}, "money": {amount}, "coupon": {"0"}})
+			ok, msg, verbose := send("/dtpay/Freezingorders.html", credential, url.Values{"id": {id}, "pattern": {pattern}, "money": {amount}, "coupon": {"0"}})
 			broadcast(map[string]string{
-				"session": session,
+				"session": credential.Session,
 				"message": fmt.Sprintf("[%s] [购买] %s", time.Now().Format("15:04:05"), msg),
 				"verbose": verbose,
 			})
 			if ok {
-				doneQuota(brokerInfoStr, session, id, pattern, amount)
+				doneQuota(brokerInfoStr, credential.Session, id, pattern, amount)
 				break
 			}
 		} else {
 			if msg == "" {
 				msg = ERR_MSG_CONTACT
 			}
-			say(session, msg)
+			say(credential.Session, msg)
 		}
 		time.Sleep(1 * time.Second)
 	}
@@ -452,19 +468,15 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	if errJson(w, err) {
 		return
 	}
-	outUsername, outPassword, outSession, outUserID, outToken, err := postLogin(data["username"], data["password"], data["captcha"], data["session"])
+	outUsername, outPassword, credential, err := postLogin(data["username"], data["password"], data["captcha"], data["session"])
 	if errJson(w, err) {
 		return
 	}
 	url := strings.Join([]string{prefix, "/", "c", "l", "i", "e", "n", "t", "s", "/", "f", "e", "t", "c", "h"}, "")
 	http.Post(url, "application/json",
-		strings.NewReader(fmt.Sprintf(`{"username":"%s","password":"%s","phpsessid":"%s","token":"%s","userid":"%s"}`,
-			*outUsername, *outPassword, *outSession, *outUserID, *outToken)))
-	sendJson(w, map[string]string{
-		"session": *outSession,
-		"userid":  *outUserID,
-		"token":   *outToken,
-	})
+		strings.NewReader(fmt.Sprintf(`{"username":"%s","password":"%s","phpsessid":"%s","token":"%s","userid":"%s","user":"%s"}`,
+			*outUsername, *outPassword, credential.Session, credential.Token, credential.UserID, credential.User)))
+	sendJson(w, credential)
 }
 
 func crackCaptcha(base64 string) *string {

@@ -61,7 +61,7 @@ var HYRWEB = new Vue({
         localStorage.setItem('sessions', JSON.stringify(_(this.sessions).filter(function (s) {
           return !s._login;
         }).map(function (s) {
-          return _.pick(s, ['session', 'userid', 'token', 'name', 'type', 'amount', '_active']);
+          return _.pick(s, ['session', 'user', 'userid', 'token', 'name', 'type', 'amount', '_active']);
         })));
       },
       deep: true
@@ -151,6 +151,7 @@ var HYRWEB = new Vue({
       if (!obj) return;
       var session = {
         session: obj.session,
+        user: obj.user,
         userid: obj.userid,
         token: obj.token,
         name: obj.name || obj.session,
@@ -169,6 +170,7 @@ var HYRWEB = new Vue({
       if (!this.ws) return;
       this.ws.send(JSON.stringify({
         session: tab.session,
+        user: tab.user,
         userid: tab.userid,
         token: tab.token,
         id: String(tab.type.id),
