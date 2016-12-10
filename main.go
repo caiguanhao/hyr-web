@@ -1,3 +1,5 @@
+//go:generate goversioninfo -icon=icon.ico
+
 package main
 
 import (
@@ -323,7 +325,7 @@ func buyProduct(id, pattern, amount string, credential Credential) {
 					sayNow(credential.Session, "[验证] 错误：空白的验证码。如果情况持续，建议退出再重新登录")
 					continue
 				}
-				sayNow(credential.Session, "[验证] 破解验证码，需时4-10秒，超过20秒将自动重试...")
+				sayNow(credential.Session, "[验证] 破解验证码，通常需时4-10秒，超过30秒将自动重试...")
 				code := crackCaptcha(*captcha)
 				if code == nil {
 					sayNow(credential.Session, "[验证] 无法破解验证码")
@@ -552,7 +554,7 @@ func crackCaptcha(base64 string) *string {
 	v.Set("base64Str", base64)
 	v.Set("dtype", "json")
 	client := http.DefaultClient
-	client.Timeout = 20 * time.Second
+	client.Timeout = 30 * time.Second
 	res, err := client.PostForm("https://op.juhe.cn/vercode/index", v)
 	if err != nil {
 		return nil

@@ -18,4 +18,5 @@ find * -name '*.html' -o -name '*.js' | awk '
   }
 ' > vendor/precompiled/files.go
 
+go generate
 go build
