@@ -254,6 +254,30 @@ func say(session, msg string) {
 	})
 }
 
+func sayNow(session, msg string) {
+	say(session, fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), msg))
+}
+
+func getBuyCaptcha(credential Credential) *string {
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", "https://www.hengyirong.com/investment/captcha/", nil)
+	if err != nil {
+		return nil
+	}
+	req.Header.Add("Cookie", credential.ToCookie())
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	defer resp.Body.Close()
+	if err != nil {
+		return nil
+	}
+	c := base64.StdEncoding.EncodeToString(body)
+	return &c
+}
+
 func buyProduct(id, pattern, amount string, credential Credential) {
 	say(credential.Session, "请稍候...")
 
@@ -281,6 +305,45 @@ func buyProduct(id, pattern, amount string, credential Credential) {
 		say(credential.Session, msg)
 		time.Sleep(1 * time.Second)
 	}
+
+	vcode := ""
+
+	buyCaptcha := func() {
+		for {
+			mutex.Lock()
+			_, ok := going[credential.Session]
+			mutex.Unlock()
+			if !ok {
+				break
+			}
+			if vcode == "" {
+				sayNow(credential.Session, "[验证] 获取验证码...")
+				captcha := getBuyCaptcha(credential)
+				if captcha == nil || len(*captcha) < 1000 {
+					sayNow(credential.Session, "[验证] 错误：空白的验证码。如果情况持续，建议退出再重新登录")
+					continue
+				}
+				sayNow(credential.Session, "[验证] 破解验证码，需时4-10秒，超过20秒将自动重试...")
+				code := crackCaptcha(*captcha)
+				if code == nil {
+					sayNow(credential.Session, "[验证] 无法破解验证码")
+					continue
+				}
+				vcode = *code
+				sayNow(credential.Session, fmt.Sprintf("[验证] 获得验证码 %s ...", vcode))
+			}
+			_, _, ret := send("/dtpay/Verifycode.html", credential, url.Values{"vcode": {vcode}})
+			if ret == "1" {
+				sayNow(credential.Session, "[验证] 服务器认为验证码正确")
+				break
+			} else {
+				vcode = ""
+				sayNow(credential.Session, "[验证] 验证码错误")
+			}
+		}
+	}
+
+	buyCaptcha()
 
 	for {
 		mutex.Lock()
@@ -310,7 +373,7 @@ func buyProduct(id, pattern, amount string, credential Credential) {
 		}
 		_, qok, msg := checkQuota(brokerInfoStr, credential.Session, id, pattern, amount)
 		if qok {
-			ok, msg, verbose := send("/dtpay/Freezingorders.html", credential, url.Values{"id": {id}, "pattern": {pattern}, "money": {amount}, "coupon": {"0"}})
+			ok, msg, verbose := send("/dtpay/Freezingorders.html", credential, url.Values{"id": {id}, "pattern": {pattern}, "money": {amount}, "coupon": {"0"}, "vcode": {vcode}})
 			broadcast(map[string]string{
 				"session": credential.Session,
 				"message": fmt.Sprintf("[%s] [购买] %s", time.Now().Format("15:04:05"), msg),
@@ -319,6 +382,9 @@ func buyProduct(id, pattern, amount string, credential Credential) {
 			if ok {
 				doneQuota(brokerInfoStr, credential.Session, id, pattern, amount)
 				break
+			} else if strings.Contains(msg, "验证码") {
+				vcode = ""
+				buyCaptcha()
 			}
 		} else {
 			if msg == "" {
@@ -485,7 +551,9 @@ func crackCaptcha(base64 string) *string {
 	v.Set("codeType", "4004")
 	v.Set("base64Str", base64)
 	v.Set("dtype", "json")
-	res, err := http.PostForm("https://op.juhe.cn/vercode/index", v)
+	client := http.DefaultClient
+	client.Timeout = 20 * time.Second
+	res, err := client.PostForm("https://op.juhe.cn/vercode/index", v)
 	if err != nil {
 		return nil
 	}
@@ -519,6 +587,7 @@ func newSessionHandler(w http.ResponseWriter, r *http.Request) {
 	if errJson(w, err) {
 		return
 	}
+	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if errJson(w, err) {
 		return
