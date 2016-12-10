@@ -24,7 +24,7 @@ import (
 	"github.com/skratchdot/open-golang/open"
 )
 
-const VERSION = "1.4"
+const VERSION = "1.5"
 const ERR_MSG_CONTACT = "请联系负责人升级程序。"
 
 type Res struct {

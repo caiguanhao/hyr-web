@@ -81,13 +81,18 @@ var HYRWEB = new Vue({
       this.moreLogin();
     },
     crackCaptcha: function (login) {
+      if (login.captcha) return;
+      login._cracking = true;
       this.$http.post('/crack', { image: login.image }).then(function (res) {
         login.captcha = res.body.result;
+      }).finally(function () {
+        login._cracking = false;
       });
     },
     moreLogin: function (replace) {
       this.$http.get('/new').then(function (res) {
         var login = {
+          _cracking: false,
           image: res.body.image,
           session: res.body.session,
           captcha: null

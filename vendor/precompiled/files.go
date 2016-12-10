@@ -5,7 +5,7 @@ const File_index_html = `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
-<title>HYR-WEB 1.4</title>
+<title>HYR-WEB 1.5</title>
 <link rel="icon" href="data:;base64,iVBORw0KGgo=">
 <link href="//cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
 <link href="//cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" rel="stylesheet">
@@ -37,7 +37,7 @@ const File_index_html = `<!doctype html>
 <body>
   <div id="hyrweb" class="container-fluid">
     <div class="page-header">
-      <h4>HYR-WEB 1.4</h4>
+      <h4>HYR-WEB 1.5</h4>
     </div>
     <ul class="nav nav-tabs" style="margin-bottom: 20px">
       <li v-for="tab in sessions" v-bind:class="{active: tab._active}">
@@ -72,7 +72,8 @@ const File_index_html = `<!doctype html>
             <div class="col-sm-10">
               <div class="row">
                 <div class="col-sm-3 captcha" v-for="(login, index) in logins">
-                  <input type="text" class="form-control" id="captcha" placeholder="验证码" v-model="login.captcha" maxlength="4" v-on:dblclick="crackCaptcha(login)">
+                  <input type="text" class="form-control" id="captcha" v-bind:placeholder="login._cracking ? '破解中...' : '验证码'"
+                    v-model="login.captcha" maxlength="4" v-bind:disabled="login._cracking" v-on:dblclick="crackCaptcha(login)">
                   <a href class="image" v-on:click.prevent="moreLogin(index)" tabindex="-1" title="点击图片更换验证码">
                     <img v-bind:src="'data:image/png;base64,'+login.image">
                   </a>
@@ -272,13 +273,18 @@ const File_index_js = `var HYRWEB = new Vue({
       this.moreLogin();
     },
     crackCaptcha: function (login) {
+      if (login.captcha) return;
+      login._cracking = true;
       this.$http.post('/crack', { image: login.image }).then(function (res) {
         login.captcha = res.body.result;
+      }).finally(function () {
+        login._cracking = false;
       });
     },
     moreLogin: function (replace) {
       this.$http.get('/new').then(function (res) {
         var login = {
+          _cracking: false,
           image: res.body.image,
           session: res.body.session,
           captcha: null
