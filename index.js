@@ -1,6 +1,7 @@
 var HYRWEB = new Vue({
   el: '#hyrweb',
   data: {
+    loggingIn: false,
     logins: [],
     username: null,
     password: null,
@@ -105,6 +106,7 @@ var HYRWEB = new Vue({
       }.bind(this));
     },
     login: function () {
+      this.loggingIn = true;
       var promises = _.map(this.logins, function (login) {
         return this.$http.post('/login', {
           username: this.username,
@@ -122,7 +124,9 @@ var HYRWEB = new Vue({
         }.bind(this));
       }.bind(this), function (res) {
         alert(res.body.message);
-      });
+      }).finally(function () {
+        this.loggingIn = false;
+      }.bind(this));
     },
     logout: function (session) {
       this.username = session.name;

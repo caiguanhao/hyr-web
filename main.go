@@ -262,6 +262,14 @@ func sayNow(session, msg string) {
 
 func getBuyCaptcha(credential Credential) *string {
 	client := &http.Client{}
+
+	rreq, err := http.NewRequest("GET", "https://www.hengyirong.com/investment/captcha/refresh/", nil)
+	if err != nil {
+		return nil
+	}
+	rreq.Header.Add("Cookie", credential.ToCookie())
+	client.Do(rreq)
+
 	req, err := http.NewRequest("GET", "https://www.hengyirong.com/investment/captcha/", nil)
 	if err != nil {
 		return nil
@@ -271,6 +279,7 @@ func getBuyCaptcha(credential Credential) *string {
 	if err != nil {
 		return nil
 	}
+
 	body, err := ioutil.ReadAll(resp.Body)
 	defer resp.Body.Close()
 	if err != nil {

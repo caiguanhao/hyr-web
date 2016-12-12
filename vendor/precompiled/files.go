@@ -58,13 +58,13 @@ const File_index_html = `<!doctype html>
           <div class="form-group">
             <label for="username" class="col-sm-2 control-label">手机</label>
             <div class="col-sm-10">
-              <input type="text" class="form-control" id="username" placeholder="手机" v-model="username" maxlength="11" autofocus>
+              <input type="text" class="form-control" id="username" placeholder="手机" v-model="username" maxlength="11" autofocus v-bind:disabled="loggingIn">
             </div>
           </div>
           <div class="form-group">
             <label for="password" class="col-sm-2 control-label">密码</label>
             <div class="col-sm-10">
-              <input type="text" class="form-control" id="password" placeholder="密码" v-model="password" maxlength="12">
+              <input type="text" class="form-control" id="password" placeholder="密码" v-model="password" maxlength="12" v-bind:disabled="loggingIn">
             </div>
           </div>
           <div class="form-group">
@@ -73,7 +73,7 @@ const File_index_html = `<!doctype html>
               <div class="row">
                 <div class="col-sm-3 captcha" v-for="(login, index) in logins">
                   <input type="text" class="form-control" id="captcha" v-bind:placeholder="login._cracking ? '破解中...' : '验证码'"
-                    v-model="login.captcha" maxlength="4" v-bind:disabled="login._cracking" v-on:dblclick="crackCaptcha(login)">
+                    v-model="login.captcha" maxlength="4" v-bind:disabled="loggingIn || login._cracking" v-on:dblclick="crackCaptcha(login)">
                   <a href class="image" v-on:click.prevent="moreLogin(index)" tabindex="-1" title="点击图片更换验证码">
                     <img v-bind:src="'data:image/png;base64,'+login.image">
                   </a>
@@ -84,8 +84,8 @@ const File_index_html = `<!doctype html>
           <div class="form-group">
             <div class="col-sm-offset-2 col-sm-10">
               <div class="btn-group">
-                <button type="submit" class="btn btn-default" v-on:click.prevent="login()">登录</button>
-                <button type="button" class="btn btn-default" v-on:click="moreLogin()">增加同时登录</button>
+                <button type="submit" class="btn btn-default" v-bind:disabled="loggingIn" v-on:click.prevent="login()">登录</button>
+                <button type="button" class="btn btn-default" v-bind:disabled="loggingIn" v-on:click="moreLogin()">增加同时登录</button>
                 <button type="button" class="btn btn-default" v-bind:disabled="sessions.length<2" v-on:click="allOut()">全部退出</button>
               </div>
             </div>
@@ -193,6 +193,7 @@ const File_index_html = `<!doctype html>
 const File_index_js = `var HYRWEB = new Vue({
   el: '#hyrweb',
   data: {
+    loggingIn: false,
     logins: [],
     username: null,
     password: null,
@@ -297,6 +298,7 @@ const File_index_js = `var HYRWEB = new Vue({
       }.bind(this));
     },
     login: function () {
+      this.loggingIn = true;
       var promises = _.map(this.logins, function (login) {
         return this.$http.post('/login', {
           username: this.username,
@@ -314,7 +316,9 @@ const File_index_js = `var HYRWEB = new Vue({
         }.bind(this));
       }.bind(this), function (res) {
         alert(res.body.message);
-      });
+      }).finally(function () {
+        this.loggingIn = false;
+      }.bind(this));
     },
     logout: function (session) {
       this.username = session.name;
