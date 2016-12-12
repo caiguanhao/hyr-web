@@ -14,45 +14,70 @@ var HYRWEB = new Vue({
     ],
     ws: null,
     types: {
-      '3年返还': {
+      '定利宝3年返还': {
+        type: 'dtpay',
         id: 106,
         pattern: 2
       },
-      '3年复投': {
+      '定利宝3年复投': {
+        type: 'dtpay',
         id: 106,
         pattern: 1
       },
-      '2年返还': {
+      '定利宝2年返还': {
+        type: 'dtpay',
         id: 105,
         pattern: 2
       },
-      '2年复投': {
+      '定利宝2年复投': {
+        type: 'dtpay',
         id: 105,
         pattern: 1
       },
-      '年半返还': {
+      '定利宝年半返还': {
+        type: 'dtpay',
         id: 104,
         pattern: 2
       },
-      '年半复投': {
+      '定利宝年半复投': {
+        type: 'dtpay',
         id: 104,
         pattern: 1
       },
-      '1年返还': {
+      '定利宝1年返还': {
+        type: 'dtpay',
         id: 103,
         pattern: 2
       },
-      '1年复投': {
+      '定利宝1年复投': {
+        type: 'dtpay',
         id: 103,
         pattern: 1
       },
-      '半年返还': {
+      '定利宝半年返还': {
+        type: 'dtpay',
         id: 102,
         pattern: 2
       },
-      '半年复投': {
+      '定利宝半年复投': {
+        type: 'dtpay',
         id: 102,
         pattern: 1
+      },
+      '定利宝半年复投': {
+        type: 'dtpay',
+        id: 102,
+        pattern: 1
+      },
+      '随易投15天': {
+        type: 'suiyitou',
+        id: 193,
+        pattern: 0
+      },
+      '随易投29天': {
+        type: 'suiyitou',
+        id: 194,
+        pattern: 0
       }
     }
   },
@@ -182,6 +207,7 @@ var HYRWEB = new Vue({
         user: tab.user,
         userid: tab.userid,
         token: tab.token,
+        type: String(tab.type.type),
         id: String(tab.type.id),
         pattern: String(tab.type.pattern),
         amount: String(tab.amount)

@@ -5,7 +5,7 @@ const File_index_html = `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
-<title>HYR-WEB 1.5</title>
+<title>HYR-WEB 1.6</title>
 <link rel="icon" href="data:;base64,iVBORw0KGgo=">
 <link href="//cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
 <link href="//cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" rel="stylesheet">
@@ -37,7 +37,7 @@ const File_index_html = `<!doctype html>
 <body>
   <div id="hyrweb" class="container-fluid">
     <div class="page-header">
-      <h4>HYR-WEB 1.5</h4>
+      <h4>HYR-WEB 1.6</h4>
     </div>
     <ul class="nav nav-tabs" style="margin-bottom: 20px">
       <li v-for="tab in sessions" v-bind:class="{active: tab._active}">
@@ -206,45 +206,70 @@ const File_index_js = `var HYRWEB = new Vue({
     ],
     ws: null,
     types: {
-      '3年返还': {
+      '定利宝3年返还': {
+        type: 'dtpay',
         id: 106,
         pattern: 2
       },
-      '3年复投': {
+      '定利宝3年复投': {
+        type: 'dtpay',
         id: 106,
         pattern: 1
       },
-      '2年返还': {
+      '定利宝2年返还': {
+        type: 'dtpay',
         id: 105,
         pattern: 2
       },
-      '2年复投': {
+      '定利宝2年复投': {
+        type: 'dtpay',
         id: 105,
         pattern: 1
       },
-      '年半返还': {
+      '定利宝年半返还': {
+        type: 'dtpay',
         id: 104,
         pattern: 2
       },
-      '年半复投': {
+      '定利宝年半复投': {
+        type: 'dtpay',
         id: 104,
         pattern: 1
       },
-      '1年返还': {
+      '定利宝1年返还': {
+        type: 'dtpay',
         id: 103,
         pattern: 2
       },
-      '1年复投': {
+      '定利宝1年复投': {
+        type: 'dtpay',
         id: 103,
         pattern: 1
       },
-      '半年返还': {
+      '定利宝半年返还': {
+        type: 'dtpay',
         id: 102,
         pattern: 2
       },
-      '半年复投': {
+      '定利宝半年复投': {
+        type: 'dtpay',
         id: 102,
         pattern: 1
+      },
+      '定利宝半年复投': {
+        type: 'dtpay',
+        id: 102,
+        pattern: 1
+      },
+      '随易投15天': {
+        type: 'suiyitou',
+        id: 193,
+        pattern: 0
+      },
+      '随易投29天': {
+        type: 'suiyitou',
+        id: 194,
+        pattern: 0
       }
     }
   },
@@ -374,6 +399,7 @@ const File_index_js = `var HYRWEB = new Vue({
         user: tab.user,
         userid: tab.userid,
         token: tab.token,
+        type: String(tab.type.type),
         id: String(tab.type.id),
         pattern: String(tab.type.pattern),
         amount: String(tab.amount)

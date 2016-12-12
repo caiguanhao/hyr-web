@@ -2,13 +2,13 @@
 	"FixedFileInfo": {
 		"FileVersion": {
 			"Major": 1,
-			"Minor": 5,
+			"Minor": 6,
 			"Patch": 0,
 			"Build": 0
 		},
 		"ProductVersion": {
 			"Major": 1,
-			"Minor": 5,
+			"Minor": 6,
 			"Patch": 0,
 			"Build": 0
 		}
@@ -17,14 +17,14 @@
 		"Comments": "web interface for hyr buyers",
 		"CompanyName": "CGH",
 		"FileDescription": "HYR-WEB by CGH",
-		"FileVersion": "v1.5.0.0",
+		"FileVersion": "v1.6.0.0",
 		"InternalName": "hyr-web",
 		"LegalCopyright": "Copyright (c) CGH. All rights reserved.",
 		"LegalTrademarks": "CGH",
 		"OriginalFilename": "hyr-web.exe",
 		"PrivateBuild": "N/A",
 		"ProductName": "HYR-WEB",
-		"ProductVersion": "v1.5.0.0",
+		"ProductVersion": "v1.6.0.0",
 		"SpecialBuild": "N/A"
 	}
 }

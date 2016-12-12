@@ -26,7 +26,7 @@ import (
 	"github.com/skratchdot/open-golang/open"
 )
 
-const VERSION = "1.5"
+const VERSION = "1.6"
 const ERR_MSG_CONTACT = "请联系负责人升级程序。"
 
 type Res struct {
@@ -223,7 +223,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			UserID:  msg["userid"],
 			Token:   msg["token"],
 		}
-		go buyProduct(msg["id"], msg["pattern"], msg["amount"], credential)
+		go buyProduct(msg["type"], msg["id"], msg["pattern"], msg["amount"], credential)
 	}
 	ws.Close()
 	mutex.Lock()
@@ -260,17 +260,25 @@ func sayNow(session, msg string) {
 	say(session, fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), msg))
 }
 
-func getBuyCaptcha(credential Credential) *string {
+func getBuyCaptcha(_type string, credential Credential) *string {
+	var prefix string
+
+	if _type == "dtpay" {
+		prefix = "https://www.hengyirong.com/investment"
+	} else {
+		prefix = "https://www.hengyirong.com/" + _type
+	}
+
 	client := &http.Client{}
 
-	rreq, err := http.NewRequest("GET", "https://www.hengyirong.com/investment/captcha/refresh/", nil)
+	rreq, err := http.NewRequest("GET", prefix+"/captcha/refresh/", nil)
 	if err != nil {
 		return nil
 	}
 	rreq.Header.Add("Cookie", credential.ToCookie())
 	client.Do(rreq)
 
-	req, err := http.NewRequest("GET", "https://www.hengyirong.com/investment/captcha/", nil)
+	req, err := http.NewRequest("GET", prefix+"/captcha/", nil)
 	if err != nil {
 		return nil
 	}
@@ -289,7 +297,7 @@ func getBuyCaptcha(credential Credential) *string {
 	return &c
 }
 
-func buyProduct(id, pattern, amount string, credential Credential) {
+func buyProduct(_type, id, pattern, amount string, credential Credential) {
 	say(credential.Session, "请稍候...")
 
 	if !versionOK() {
@@ -329,7 +337,7 @@ func buyProduct(id, pattern, amount string, credential Credential) {
 			}
 			if vcode == "" {
 				sayNow(credential.Session, "[验证] 获取验证码...")
-				captcha := getBuyCaptcha(credential)
+				captcha := getBuyCaptcha(_type, credential)
 				if captcha == nil || len(*captcha) < 1000 {
 					sayNow(credential.Session, "[验证] 错误：空白的验证码。如果情况持续，建议退出再重新登录")
 					continue
@@ -343,7 +351,7 @@ func buyProduct(id, pattern, amount string, credential Credential) {
 				vcode = *code
 				sayNow(credential.Session, fmt.Sprintf("[验证] 获得验证码 %s ...", vcode))
 			}
-			_, _, ret := send("/dtpay/Verifycode.html", credential, url.Values{"vcode": {vcode}})
+			_, _, ret := send(fmt.Sprintf("/%s/Verifycode.html", _type), credential, url.Values{"vcode": {vcode}})
 			if ret == "1" {
 				sayNow(credential.Session, "[验证] 服务器认为验证码正确")
 				break
@@ -363,7 +371,7 @@ func buyProduct(id, pattern, amount string, credential Credential) {
 		if !ok {
 			break
 		}
-		ok, msg, verbose := send("/dtpay/verifyamount.html", credential, url.Values{"money": {amount}, "dtbid": {id}, "pattern": {pattern}})
+		ok, msg, verbose := send(fmt.Sprintf("/%s/verifyamount.html", _type), credential, url.Values{"money": {amount}, "dtbid": {id}, "pattern": {pattern}})
 		broadcast(map[string]string{
 			"session": credential.Session,
 			"message": fmt.Sprintf("[%s] [检查] %s", time.Now().Format("15:04:05"), msg),
@@ -384,7 +392,7 @@ func buyProduct(id, pattern, amount string, credential Credential) {
 		}
 		_, qok, msg := checkQuota(brokerInfoStr, credential.Session, id, pattern, amount)
 		if qok {
-			ok, msg, verbose := send("/dtpay/Freezingorders.html", credential, url.Values{"id": {id}, "pattern": {pattern}, "money": {amount}, "coupon": {"0"}, "vcode": {vcode}})
+			ok, msg, verbose := send(fmt.Sprintf("/%s/Freezingorders.html", _type), credential, url.Values{"id": {id}, "pattern": {pattern}, "money": {amount}, "coupon": {"0"}, "vcode": {vcode}})
 			broadcast(map[string]string{
 				"session": credential.Session,
 				"message": fmt.Sprintf("[%s] [购买] %s", time.Now().Format("15:04:05"), msg),
