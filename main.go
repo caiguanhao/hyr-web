@@ -26,7 +26,7 @@ import (
 	"github.com/skratchdot/open-golang/open"
 )
 
-const VERSION = "1.6"
+const VERSION = "1.6.1"
 const ERR_MSG_CONTACT = "请联系负责人升级程序。"
 
 type Res struct {
@@ -140,7 +140,9 @@ func getDocument(path string, session string) (*goquery.Document, error) {
 		return nil, err
 	}
 	req.Header.Set("Cookie", "PHPSESSID="+session)
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -150,7 +152,9 @@ func getDocument(path string, session string) (*goquery.Document, error) {
 }
 
 func send(path string, credential Credential, form url.Values) (success bool, msg, ret string) {
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
 	req, err := http.NewRequest("POST", "https://www.hengyirong.com"+path, strings.NewReader(form.Encode()))
 	if err != nil {
 		return
@@ -269,7 +273,9 @@ func getBuyCaptcha(_type string, credential Credential) *string {
 		prefix = "https://www.hengyirong.com/" + _type
 	}
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
 
 	rreq, err := http.NewRequest("GET", prefix+"/captcha/refresh/", nil)
 	if err != nil {
@@ -362,8 +368,6 @@ func buyProduct(_type, id, pattern, amount string, credential Credential) {
 		}
 	}
 
-	buyCaptcha()
-
 	for {
 		mutex.Lock()
 		_, ok := going[credential.Session]
@@ -378,6 +382,7 @@ func buyProduct(_type, id, pattern, amount string, credential Credential) {
 			"verbose": verbose,
 		})
 		if ok {
+			buyCaptcha()
 			break
 		}
 		time.Sleep(1 * time.Second)
