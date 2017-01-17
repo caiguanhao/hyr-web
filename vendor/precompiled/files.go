@@ -5,7 +5,7 @@ const File_index_html = `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
-<title>HYR-WEB 1.6.1</title>
+<title>HYR-WEB 1.7</title>
 <link rel="icon" href="data:;base64,iVBORw0KGgo=">
 <link href="//cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
 <link href="//cdn.bootcss.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" rel="stylesheet">
@@ -37,7 +37,7 @@ const File_index_html = `<!doctype html>
 <body>
   <div id="hyrweb" class="container-fluid">
     <div class="page-header">
-      <h4>HYR-WEB 1.6.1</h4>
+      <h4>HYR-WEB 1.7</h4>
     </div>
     <ul class="nav nav-tabs" style="margin-bottom: 20px">
       <li v-for="tab in sessions" v-bind:class="{active: tab._active}">
@@ -72,8 +72,7 @@ const File_index_html = `<!doctype html>
             <div class="col-sm-10">
               <div class="row">
                 <div class="col-sm-3 captcha" v-for="(login, index) in logins">
-                  <input type="text" class="form-control" id="captcha" v-bind:placeholder="login._cracking ? '破解中...' : '验证码'"
-                    v-model="login.captcha" maxlength="4" v-bind:disabled="loggingIn || login._cracking" v-on:dblclick="crackCaptcha(login)">
+                  <input type="text" class="form-control" id="captcha" placeholder="验证码" v-model="login.captcha" maxlength="4">
                   <a href class="image" v-on:click.prevent="moreLogin(index)" tabindex="-1" title="点击图片更换验证码">
                     <img v-bind:src="'data:image/png;base64,'+login.image">
                   </a>
@@ -110,8 +109,27 @@ const File_index_html = `<!doctype html>
                   </div>
                 </div>
                 <div class="form-group">
+                  <label class="col-sm-1 control-label">C</label>
+                  <div class="col-sm-11">
+                    <div class="form-control-static" v-text="tab.challenge"></div>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="col-sm-1 control-label">V</label>
+                  <div class="col-sm-11">
+                    <div class="form-control-static" v-text="tab.validate"></div>
+                  </div>
+                </div>
+                <div class="form-group" v-if="geetestUrl(tab)">
+                  <label class="col-sm-1 control-label"></label>
+                  <div class="col-sm-11">
+                    <iframe v-get-validate="tab" v-bind:src="geetestUrl(tab)" width="320" height="200" frameborder="0"></iframe>
+                  </div>
+                </div>
+                <div class="form-group">
                   <div class="col-sm-offset-1 col-sm-11">
-                    <button type="button" class="btn btn-default" v-bind:disabled="!ws" v-on:click="go(tab)">抢</button>
+                    <button type="button" class="btn btn-default" v-bind:disabled="!ws" v-on:click="geetest(tab)">验证</button>
+                    <button type="button" class="btn btn-default" v-bind:disabled="!ws || !tab.challenge || !tab.validate" v-on:click="go(tab)">抢</button>
                   </div>
                 </div>
               </div>
@@ -273,6 +291,32 @@ const File_index_js = `var HYRWEB = new Vue({
       }
     }
   },
+  directives: {
+    'get-validate': {
+      inserted: function (el, binding) {
+        el.onload = function () {
+          var _appendChild = el.contentWindow.Element.prototype.appendChild;
+          el.contentWindow.Element.prototype.appendChild = function () {
+            var ret = _appendChild.apply(this, arguments);
+            var elem = arguments[0];
+            if (elem.tagName === 'SCRIPT') {
+              var src = elem.getAttribute('src');
+              var m = /ajax.*callback=(geetest_\d+)/.exec(src);
+              if (m) {
+                var cb = m[1];
+                var _cb = el.contentWindow[cb];
+                el.contentWindow[cb] = function () {
+                  binding.value.validate = arguments[0].validate;
+                  return _cb.apply(this, arguments);
+                };
+              }
+            }
+            return ret;
+          };
+        };
+      }
+    }
+  },
   watch: {
     sessions: {
       handler: function () {
@@ -298,19 +342,9 @@ const File_index_js = `var HYRWEB = new Vue({
       this.logins = [];
       this.moreLogin();
     },
-    crackCaptcha: function (login) {
-      if (login.captcha) return;
-      login._cracking = true;
-      this.$http.post('/crack', { image: login.image }).then(function (res) {
-        login.captcha = res.body.result;
-      }).finally(function () {
-        login._cracking = false;
-      });
-    },
     moreLogin: function (replace) {
       this.$http.get('/new').then(function (res) {
         var login = {
-          _cracking: false,
           image: res.body.image,
           session: res.body.session,
           captcha: null
@@ -385,12 +419,31 @@ const File_index_js = `var HYRWEB = new Vue({
         records: [],
         type: obj.type || this.types[_(this.types).keys().first()],
         amount: obj.amount || 10000,
+        gt: null,
+        challenge: null,
+        validate: null,
         _active: obj._active || false,
         _logs: [],
         _expired: false
       };
       this.sessions.splice(this.sessions.length - 1, 0, session);
       this.getInfo(session);
+    },
+    geetest: function (tab) {
+      if (!this.ws) return;
+      this.ws.send(JSON.stringify({
+        action: 'geetest',
+        session: tab.session,
+        user: tab.user,
+        userid: tab.userid,
+        token: tab.token
+      }));
+    },
+    geetestUrl: function (tab) {
+      if (!tab.challenge || !tab.gt || tab.validate) {
+        return;
+      }
+      return '/geetest?success=1&challenge=' + tab.challenge + '&gt=' + tab.gt + '&debug=0&title=&mobileInfo=&lang=zh-hans-cn&width=282';
     },
     go: function (tab) {
       if (!this.ws) return;
@@ -402,7 +455,10 @@ const File_index_js = `var HYRWEB = new Vue({
         type: String(tab.type.type),
         id: String(tab.type.id),
         pattern: String(tab.type.pattern),
-        amount: String(tab.amount)
+        amount: String(tab.amount),
+        gt: String(tab.gt),
+        challenge: String(tab.challenge),
+        validate: String(tab.validate)
       }));
     },
     ungo: function (tab) {
@@ -443,6 +499,11 @@ const File_index_js = `var HYRWEB = new Vue({
     this.ws.onmessage = function (evt) {
       var data = JSON.parse(evt.data);
       var session = _.find(this.sessions, { session: data.session });
+      if (data.type === 'geetest') {
+        session.gt = data.gt;
+        session.challenge = data.challenge;
+        return;
+      }
       if (session._logs.length > 0 && session._logs[0] === '请稍候...') {
         session._logs.splice(0, 1);
       }

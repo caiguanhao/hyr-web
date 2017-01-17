@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -26,7 +25,7 @@ import (
 	"github.com/skratchdot/open-golang/open"
 )
 
-const VERSION = "1.6.1"
+const VERSION = "1.7"
 const ERR_MSG_CONTACT = "请联系负责人升级程序。"
 
 type Res struct {
@@ -151,7 +150,32 @@ func getDocument(path string, session string) (*goquery.Document, error) {
 	return goquery.NewDocumentFromResponse(resp)
 }
 
+func getGeeTest(credential Credential) (challenge, gt string) {
+	req, err := http.NewRequest("GET", "https://www.hengyirong.com/dtpay/StartCaptchaServlet.html?type=pc", nil)
+	if err != nil {
+		return "", ""
+	}
+	req.Header.Add("Cookie", credential.ToCookie())
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", ""
+	}
+	defer resp.Body.Close()
+	var res struct {
+		Success   int    `json:"success"`
+		Challenge string `json:"challenge"`
+		GT        string `json:"gt"`
+	}
+	json.NewDecoder(resp.Body).Decode(&res)
+	resp.Body.Close()
+	return res.Challenge, res.GT
+}
+
 func send(path string, credential Credential, form url.Values) (success bool, msg, ret string) {
+	fmt.Println(form.Encode())
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
@@ -218,16 +242,20 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			mutex.Unlock()
 			continue
 		}
-		mutex.Lock()
-		going[msg["session"]] = true
-		mutex.Unlock()
 		credential := Credential{
 			Session: msg["session"],
 			User:    msg["user"],
 			UserID:  msg["userid"],
 			Token:   msg["token"],
 		}
-		go buyProduct(msg["type"], msg["id"], msg["pattern"], msg["amount"], credential)
+		if msg["action"] == "geetest" {
+			go geetest(credential)
+			continue
+		}
+		mutex.Lock()
+		going[msg["session"]] = true
+		mutex.Unlock()
+		go buyProduct(msg["type"], msg["id"], msg["pattern"], msg["amount"], msg["challenge"], msg["validate"], credential)
 	}
 	ws.Close()
 	mutex.Lock()
@@ -303,7 +331,24 @@ func getBuyCaptcha(_type string, credential Credential) *string {
 	return &c
 }
 
-func buyProduct(_type, id, pattern, amount string, credential Credential) {
+func geetest(credential Credential) {
+	challenge, gt := getGeeTest(credential)
+	broadcast(map[string]string{
+		"session":   credential.Session,
+		"type":      "geetest",
+		"challenge": challenge,
+		"gt":        gt,
+	})
+}
+
+func geetestHandler(w http.ResponseWriter, r *http.Request) {
+	u, _ := url.Parse("https://static.geetest.com/static/appweb/app-index.html")
+	u.RawQuery = r.URL.RawQuery
+	resp, _ := http.Get(u.String())
+	io.Copy(w, resp.Body)
+}
+
+func buyProduct(_type, id, pattern, amount, challenge, validate string, credential Credential) {
 	say(credential.Session, "请稍候...")
 
 	if !versionOK() {
@@ -331,43 +376,6 @@ func buyProduct(_type, id, pattern, amount string, credential Credential) {
 		time.Sleep(1 * time.Second)
 	}
 
-	vcode := ""
-
-	buyCaptcha := func() {
-		for {
-			mutex.Lock()
-			_, ok := going[credential.Session]
-			mutex.Unlock()
-			if !ok {
-				break
-			}
-			if vcode == "" {
-				sayNow(credential.Session, "[验证] 获取验证码...")
-				captcha := getBuyCaptcha(_type, credential)
-				if captcha == nil || len(*captcha) < 1000 {
-					sayNow(credential.Session, "[验证] 错误：空白的验证码。如果情况持续，建议退出再重新登录")
-					continue
-				}
-				sayNow(credential.Session, "[验证] 破解验证码，通常需时4-10秒，超过30秒将自动重试...")
-				code := crackCaptcha(*captcha)
-				if code == nil {
-					sayNow(credential.Session, "[验证] 无法破解验证码")
-					continue
-				}
-				vcode = *code
-				sayNow(credential.Session, fmt.Sprintf("[验证] 获得验证码 %s ...", vcode))
-			}
-			_, _, ret := send(fmt.Sprintf("/%s/Verifycode.html", _type), credential, url.Values{"vcode": {vcode}})
-			if ret == "1" {
-				sayNow(credential.Session, "[验证] 服务器认为验证码正确")
-				break
-			} else {
-				vcode = ""
-				sayNow(credential.Session, "[验证] 验证码错误")
-			}
-		}
-	}
-
 	for {
 		mutex.Lock()
 		_, ok := going[credential.Session]
@@ -382,7 +390,6 @@ func buyProduct(_type, id, pattern, amount string, credential Credential) {
 			"verbose": verbose,
 		})
 		if ok {
-			buyCaptcha()
 			break
 		}
 		time.Sleep(1 * time.Second)
@@ -397,7 +404,11 @@ func buyProduct(_type, id, pattern, amount string, credential Credential) {
 		}
 		_, qok, msg := checkQuota(brokerInfoStr, credential.Session, id, pattern, amount)
 		if qok {
-			ok, msg, verbose := send(fmt.Sprintf("/%s/Freezingorders.html", _type), credential, url.Values{"id": {id}, "pattern": {pattern}, "money": {amount}, "coupon": {"0"}, "vcode": {vcode}})
+			ok, msg, verbose := send(fmt.Sprintf("/%s/Freezingorders.html", _type), credential, url.Values{"id": {id}, "pattern": {pattern}, "money": {amount}, "coupon": {"0"},
+				"geetest_challenge": {challenge},
+				"geetest_validate":  {validate},
+				"geetest_seccode":   {validate + "|jordan"},
+			})
 			broadcast(map[string]string{
 				"session": credential.Session,
 				"message": fmt.Sprintf("[%s] [购买] %s", time.Now().Format("15:04:05"), msg),
@@ -406,9 +417,6 @@ func buyProduct(_type, id, pattern, amount string, credential Credential) {
 			if ok {
 				doneQuota(brokerInfoStr, credential.Session, id, pattern, amount)
 				break
-			} else if strings.Contains(msg, "验证码") {
-				vcode = ""
-				buyCaptcha()
 			}
 		} else {
 			if msg == "" {
@@ -569,43 +577,6 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	sendJson(w, credential)
 }
 
-func crackCaptcha(base64 string) *string {
-	v := url.Values{}
-	v.Set("key", crackCaptchaKey)
-	v.Set("codeType", "4004")
-	v.Set("base64Str", base64)
-	v.Set("dtype", "json")
-	client := http.DefaultClient
-	client.Timeout = 30 * time.Second
-	res, err := client.PostForm("https://op.juhe.cn/vercode/index", v)
-	if err != nil {
-		return nil
-	}
-	var resp struct {
-		ErrCode int    `json:"error_code"`
-		Result  string `json:"result"`
-		Message string `json:"reason"`
-	}
-	json.NewDecoder(res.Body).Decode(&resp)
-	res.Body.Close()
-	re := regexp.MustCompile("^[0-9]{4}$")
-	if re.MatchString(resp.Result) {
-		return &resp.Result
-	}
-	return nil
-}
-
-func crackCaptchaHandler(w http.ResponseWriter, r *http.Request) {
-	data, err := parseJsonRequestBody(r.Body)
-	if errJson(w, err) {
-		return
-	}
-	result := crackCaptcha(data["image"])
-	sendJson(w, map[string]interface{}{
-		"result": result,
-	})
-}
-
 func newSessionHandler(w http.ResponseWriter, r *http.Request) {
 	resp, err := http.Get("https://www.hengyirong.com/site/captcha/")
 	if errJson(w, err) {
@@ -655,7 +626,7 @@ func main() {
 	http.HandleFunc("/info", getInfoHandler)
 	http.HandleFunc("/login", loginHandler)
 	http.HandleFunc("/new", newSessionHandler)
-	http.HandleFunc("/crack", crackCaptchaHandler)
+	http.HandleFunc("/geetest", geetestHandler)
 	http.HandleFunc("/index.js", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeContent(w, r, "index.js", time.Now(), strings.NewReader(precompiled.File_index_js))
 	})

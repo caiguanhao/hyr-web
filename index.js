@@ -81,6 +81,32 @@ var HYRWEB = new Vue({
       }
     }
   },
+  directives: {
+    'get-validate': {
+      inserted: function (el, binding) {
+        el.onload = function () {
+          var _appendChild = el.contentWindow.Element.prototype.appendChild;
+          el.contentWindow.Element.prototype.appendChild = function () {
+            var ret = _appendChild.apply(this, arguments);
+            var elem = arguments[0];
+            if (elem.tagName === 'SCRIPT') {
+              var src = elem.getAttribute('src');
+              var m = /ajax.*callback=(geetest_\d+)/.exec(src);
+              if (m) {
+                var cb = m[1];
+                var _cb = el.contentWindow[cb];
+                el.contentWindow[cb] = function () {
+                  binding.value.validate = arguments[0].validate;
+                  return _cb.apply(this, arguments);
+                };
+              }
+            }
+            return ret;
+          };
+        };
+      }
+    }
+  },
   watch: {
     sessions: {
       handler: function () {
@@ -106,19 +132,9 @@ var HYRWEB = new Vue({
       this.logins = [];
       this.moreLogin();
     },
-    crackCaptcha: function (login) {
-      if (login.captcha) return;
-      login._cracking = true;
-      this.$http.post('/crack', { image: login.image }).then(function (res) {
-        login.captcha = res.body.result;
-      }).finally(function () {
-        login._cracking = false;
-      });
-    },
     moreLogin: function (replace) {
       this.$http.get('/new').then(function (res) {
         var login = {
-          _cracking: false,
           image: res.body.image,
           session: res.body.session,
           captcha: null
@@ -193,12 +209,31 @@ var HYRWEB = new Vue({
         records: [],
         type: obj.type || this.types[_(this.types).keys().first()],
         amount: obj.amount || 10000,
+        gt: null,
+        challenge: null,
+        validate: null,
         _active: obj._active || false,
         _logs: [],
         _expired: false
       };
       this.sessions.splice(this.sessions.length - 1, 0, session);
       this.getInfo(session);
+    },
+    geetest: function (tab) {
+      if (!this.ws) return;
+      this.ws.send(JSON.stringify({
+        action: 'geetest',
+        session: tab.session,
+        user: tab.user,
+        userid: tab.userid,
+        token: tab.token
+      }));
+    },
+    geetestUrl: function (tab) {
+      if (!tab.challenge || !tab.gt || tab.validate) {
+        return;
+      }
+      return '/geetest?success=1&challenge=' + tab.challenge + '&gt=' + tab.gt + '&debug=0&title=&mobileInfo=&lang=zh-hans-cn&width=282';
     },
     go: function (tab) {
       if (!this.ws) return;
@@ -210,7 +245,10 @@ var HYRWEB = new Vue({
         type: String(tab.type.type),
         id: String(tab.type.id),
         pattern: String(tab.type.pattern),
-        amount: String(tab.amount)
+        amount: String(tab.amount),
+        gt: String(tab.gt),
+        challenge: String(tab.challenge),
+        validate: String(tab.validate)
       }));
     },
     ungo: function (tab) {
@@ -251,6 +289,11 @@ var HYRWEB = new Vue({
     this.ws.onmessage = function (evt) {
       var data = JSON.parse(evt.data);
       var session = _.find(this.sessions, { session: data.session });
+      if (data.type === 'geetest') {
+        session.gt = data.gt;
+        session.challenge = data.challenge;
+        return;
+      }
       if (session._logs.length > 0 && session._logs[0] === '请稍候...') {
         session._logs.splice(0, 1);
       }
